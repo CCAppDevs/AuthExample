@@ -7,102 +7,105 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using AuthExample.Data;
 using AuthExample.Models;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 
 namespace AuthExample.Controllers
 {
-    public class EmployeesController : Controller
+    [Authorize]
+    public class ProjectsController : Controller
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<AppUser> _userManager;
 
-        public EmployeesController(ApplicationDbContext context, UserManager<AppUser> usr)
+        public ProjectsController(ApplicationDbContext context, UserManager<AppUser> usr)
         {
             _context = context;
             _userManager = usr;
         }
 
-        [Authorize]
-        // GET: Employees
+        // GET: Projects
         public async Task<IActionResult> Index()
         {
-            // TODO: add user manager to get user id from user claims.
             var user = await _userManager.GetUserAsync(User);
-              return _context.Employees != null ? 
-                          View(await _context.Employees.Include(e => e.Manager).Where(e => e.ManagerId == user.Id).ToListAsync()) :
-                          Problem("Entity set 'ApplicationDbContext.Employees'  is null.");
+
+            if (user == null)
+            {
+                return Problem("No user found");
+            }
+
+            // TODO fix filters
+            var memberships = await _context.Memberships.Where(m => m.UserId == user.Id).ToListAsync();
+
+              return _context.Projects != null ? 
+                          View(await _context.Projects.Where(p => memberships.Select(m => m.ProjectId).Contains(p.Id)).ToListAsync()) :
+                          Problem("Entity set 'ApplicationDbContext.Projects'  is null.");
         }
 
-        [Authorize(Roles = "Admin")]
-        // GET: Employees/Details/5
+        // GET: Projects/Details/5
         public async Task<IActionResult> Details(int? id)
         {
-            if (id == null || _context.Employees == null)
+            if (id == null || _context.Projects == null)
             {
                 return NotFound();
             }
 
-            var employee = await _context.Employees
+            var project = await _context.Projects
                 .FirstOrDefaultAsync(m => m.Id == id);
-            if (employee == null)
+            if (project == null)
             {
                 return NotFound();
             }
 
-            return View(employee);
+            return View(project);
         }
 
-        [Authorize(Roles = "Admin")]
-        // GET: Employees/Create
+        // GET: Projects/Create
         public IActionResult Create()
         {
             return View();
         }
 
-        [Authorize(Roles = "Admin")]
-        // POST: Employees/Create
+        // POST: Projects/Create
         // To protect from overposting attacks, enable the specific properties you want to bind to.
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,Name,Email")] Employee employee)
+        public async Task<IActionResult> Create([Bind("Id,Name,Description")] Project project)
         {
             if (ModelState.IsValid)
             {
-                _context.Add(employee);
+                _context.Add(project);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
             }
-            return View(employee);
+            return View(project);
         }
 
-        [Authorize(Roles = "Admin")]
-        // GET: Employees/Edit/5
+        // GET: Projects/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
-            if (id == null || _context.Employees == null)
+            if (id == null || _context.Projects == null)
             {
                 return NotFound();
             }
 
-            var employee = await _context.Employees.FindAsync(id);
-            if (employee == null)
+            var project = await _context.Projects.FindAsync(id);
+            if (project == null)
             {
                 return NotFound();
             }
-            return View(employee);
+            return View(project);
         }
 
-        [Authorize(Roles = "Admin")]
-        // POST: Employees/Edit/5
+        // POST: Projects/Edit/5
         // To protect from overposting attacks, enable the specific properties you want to bind to.
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,Email")] Employee employee)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,Description")] Project project)
         {
-            if (id != employee.Id)
+            if (id != project.Id)
             {
                 return NotFound();
             }
@@ -111,12 +114,12 @@ namespace AuthExample.Controllers
             {
                 try
                 {
-                    _context.Update(employee);
+                    _context.Update(project);
                     await _context.SaveChangesAsync();
                 }
                 catch (DbUpdateConcurrencyException)
                 {
-                    if (!EmployeeExists(employee.Id))
+                    if (!ProjectExists(project.Id))
                     {
                         return NotFound();
                     }
@@ -127,51 +130,49 @@ namespace AuthExample.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
-            return View(employee);
+            return View(project);
         }
 
-        [Authorize(Roles = "Admin")]
-        // GET: Employees/Delete/5
+        // GET: Projects/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null || _context.Employees == null)
+            if (id == null || _context.Projects == null)
             {
                 return NotFound();
             }
 
-            var employee = await _context.Employees
+            var project = await _context.Projects
                 .FirstOrDefaultAsync(m => m.Id == id);
-            if (employee == null)
+            if (project == null)
             {
                 return NotFound();
             }
 
-            return View(employee);
+            return View(project);
         }
 
-        [Authorize(Roles = "Admin")]
-        // POST: Employees/Delete/5
+        // POST: Projects/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            if (_context.Employees == null)
+            if (_context.Projects == null)
             {
-                return Problem("Entity set 'ApplicationDbContext.Employees'  is null.");
+                return Problem("Entity set 'ApplicationDbContext.Projects'  is null.");
             }
-            var employee = await _context.Employees.FindAsync(id);
-            if (employee != null)
+            var project = await _context.Projects.FindAsync(id);
+            if (project != null)
             {
-                _context.Employees.Remove(employee);
+                _context.Projects.Remove(project);
             }
             
             await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
         }
 
-        private bool EmployeeExists(int id)
+        private bool ProjectExists(int id)
         {
-          return (_context.Employees?.Any(e => e.Id == id)).GetValueOrDefault();
+          return (_context.Projects?.Any(e => e.Id == id)).GetValueOrDefault();
         }
     }
 }
