@@ -1,4 +1,7 @@
 using AuthExample.Data;
+using AuthExample.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +17,18 @@ builder.Services.AddDefaultIdentity<AppUser>(options => options.SignIn.RequireCo
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
+
+builder.Services.AddTransient<IAuthorizationHandler, MembershipRequirementHandler>();
+
+builder.Services.AddAuthorization(options =>
+{
+    // define options
+    options.AddPolicy("OwnsAProject", policy => policy.RequireClaim("ProjectIds"));
+    options.AddPolicy("ProjectOwner", policy => policy.Requirements.Add(new HasMembershipRequirement(0)));
+    options.AddPolicy("ProjectMember", policy => policy.Requirements.Add(new HasMembershipRequirement(10)));
+});
+
+builder.Services.AddTransient<IClaimsTransformation, AuthorshipClaimTransformation>();
 
 var app = builder.Build();
 

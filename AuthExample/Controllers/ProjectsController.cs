@@ -9,6 +9,8 @@ using AuthExample.Data;
 using AuthExample.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Server.HttpSys;
+using Microsoft.AspNetCore.Authentication;
 
 namespace AuthExample.Controllers
 {
@@ -17,11 +19,13 @@ namespace AuthExample.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<AppUser> _userManager;
+        private readonly IAuthorizationService _authManager;
 
-        public ProjectsController(ApplicationDbContext context, UserManager<AppUser> usr)
+        public ProjectsController(ApplicationDbContext context, UserManager<AppUser> usr, IAuthorizationService auth)
         {
             _context = context;
             _userManager = usr;
+            _authManager = auth;
         }
 
         // GET: Projects
@@ -50,14 +54,22 @@ namespace AuthExample.Controllers
                 return NotFound();
             }
 
-            var project = await _context.Projects
+            var project = await _context.Projects.Include(p => p.Memberships)
                 .FirstOrDefaultAsync(m => m.Id == id);
+
             if (project == null)
             {
                 return NotFound();
             }
 
-            return View(project);
+            AuthorizationResult result = await _authManager.AuthorizeAsync(User, project, "ProjectMember");
+
+            if (result.Succeeded)
+            {
+                return View(project);
+            }
+
+            return new ForbidResult();
         }
 
         // GET: Projects/Create
@@ -71,12 +83,24 @@ namespace AuthExample.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,Name,Description")] Project project)
+        public async Task<IActionResult> Create([Bind("Id,Name,Description,Memberships")] Project project)
         {
+            //project.Memberships = new List<Membership>();
+
             if (ModelState.IsValid)
             {
                 _context.Add(project);
                 await _context.SaveChangesAsync();
+
+                _context.Memberships.Add(new Membership
+                {
+                    UserId = _userManager.GetUserId(User),
+                    ProjectId = project.Id,
+                    Level = 0
+                });
+
+                await _context.SaveChangesAsync();
+
                 return RedirectToAction(nameof(Index));
             }
             return View(project);
@@ -90,12 +114,25 @@ namespace AuthExample.Controllers
                 return NotFound();
             }
 
-            var project = await _context.Projects.FindAsync(id);
+            var project = await _context.Projects
+                .Include(p => p.Memberships)
+                .Where(p => p.Id == id)
+                .FirstOrDefaultAsync();
+
             if (project == null)
             {
                 return NotFound();
             }
-            return View(project);
+
+            // authorize the user to view the editable project
+            AuthorizationResult result = await _authManager.AuthorizeAsync(User, project, "ProjectOwner");
+
+            if (result.Succeeded)
+            {
+                return View(project);
+            }
+
+            return new ChallengeResult();
         }
 
         // POST: Projects/Edit/5
